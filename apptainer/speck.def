@@ -17,7 +17,7 @@ From: ubuntu:24.04
         apptainer test speck.sif
 
     List connected SynSense devices:
-        apptainer exec --bind /dev/bus/usb:/dev/bus/usb speck.sif \
+        apptainer exec speck.sif \
             python -c 'import samna; print(samna.device.get_unopened_devices())'
 
     The host must have the SynSense udev rules installed. See README.md next to

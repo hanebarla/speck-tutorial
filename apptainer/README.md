@@ -49,20 +49,20 @@ lsusb
 Open an interactive shell with the USB bus visible:
 
 ```bash
-apptainer shell --bind /dev/bus/usb:/dev/bus/usb apptainer/speck.sif
+apptainer shell apptainer/speck.sif
 ```
 
 Check that Samna can discover the board:
 
 ```bash
-apptainer exec --bind /dev/bus/usb:/dev/bus/usb apptainer/speck.sif \
+apptainer exec apptainer/speck.sif \
   python -c 'import samna; print(samna.device.get_unopened_devices())'
 ```
 
 Start JupyterLab in the current repository:
 
 ```bash
-apptainer exec --bind /dev/bus/usb:/dev/bus/usb apptainer/speck.sif \
+apptainer exec apptainer/speck.sif \
   jupyter lab --ip=127.0.0.1 --no-browser
 ```
 
@@ -71,7 +71,6 @@ already available through the host's Apptainer configuration:
 
 ```bash
 apptainer exec \
-  --bind /dev/bus/usb:/dev/bus/usb \
   --bind /tmp/.X11-unix:/tmp/.X11-unix \
   --env DISPLAY="$DISPLAY" \
   apptainer/speck.sif python your_visualizer_script.py
