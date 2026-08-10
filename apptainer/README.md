@@ -76,8 +76,10 @@ apptainer exec \
   apptainer/speck.sif python your_visualizer_script.py
 ```
 
-Do not add `--contain` unless the USB device and X11 socket are also bound into
-the container; that option replaces the normal `/dev` view with a minimal one.
+Do not add `--contain` when using Speck; that option replaces the normal `/dev`
+view with a minimal one. This setup relies on Apptainer's default host `/dev`
+mount. An explicit `/dev/bus/usb` user bind can acquire the `nodev` option and
+prevent Samna from opening the device even though `lsusb` can still list it.
 
 ## Included versions
 
@@ -85,4 +87,5 @@ the container; that option replaces the normal `/dev` view with a minimal one.
 - PyTorch 2.8.0 (CPU)
 - Sinabs 3.1.3
 - Samna 0.48.6 (native SynSense wheel)
+- OpenCV headless 5.0.0.93
 - JupyterLab 4.x and ipywidgets 8.x

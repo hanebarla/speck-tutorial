@@ -82,6 +82,7 @@ From: ubuntu:24.04
 
     /opt/venv/bin/python -m pip install --no-cache-dir \
         sinabs==3.1.3 \
+        opencv-python-headless==5.0.0.93 \
         'jupyterlab>=4,<5' \
         'ipywidgets>=8,<9'
 
@@ -96,6 +97,7 @@ from importlib.metadata import version
 import samna
 import sinabs
 import torch
+import cv2
 from sinabs.backend.dynapcnn import DynapcnnNetwork
 
 assert hasattr(samna, "device")
@@ -103,6 +105,7 @@ assert DynapcnnNetwork is not None
 print(f"torch={version('torch')}")
 print(f"sinabs={version('sinabs')}")
 print(f"samna={version('samna')}")
+print(f"opencv-python-headless={version('opencv-python-headless')}")
 print("Speck Python environment: OK")
 PY
 
