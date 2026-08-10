@@ -1,0 +1,5 @@
+# SynSense USB devices. This file must be installed on the host, not only in
+# the container. These vendor IDs follow the rules published with Samna.
+SUBSYSTEM=="usb", ATTR{idVendor}=="04b4", MODE="0666"
+SUBSYSTEM=="usb", ATTR{idVendor}=="152a", MODE="0666"
+SUBSYSTEM=="usb", ATTR{idVendor}=="337d", MODE="0666"
