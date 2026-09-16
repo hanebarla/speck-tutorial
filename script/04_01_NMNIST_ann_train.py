@@ -1,4 +1,7 @@
 import argparse
+from pathlib import Path
+
+from nmnist_model import build_model, save_checkpoint
 
 from tonic.datasets.nmnist import NMNIST
 from tonic.transforms import ToFrame
@@ -20,6 +23,8 @@ def main():
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument("--output", type=Path, default=Path("output/nmnist_ann.pt"),
+                        help="checkpoint path (updated after each epoch)")
     args = parser.parse_args()
     if args.epochs < 1 or args.batch_size < 1 or args.num_workers < 0:
         parser.error("epochs and batch-size must be positive; num-workers must be nonnegative")
@@ -45,35 +50,7 @@ def main():
         f"The transformed array is in shape [Time-Step, Channel, Height, Width] --> {sample_data.shape}"
     )
 
-    # define a CNN model
-    cnn = nn.Sequential(
-        # [2, 34, 34] -> [8, 17, 17] (イベントデータは正と負のイベントの2チャンネルで構成されるため、入力チャネル数は2)
-        nn.Conv2d(
-            in_channels=2, out_channels=8, kernel_size=(3, 3), padding=(1, 1), bias=False
-        ),
-        nn.ReLU(),
-        nn.AvgPool2d(2, 2),
-        # [8, 17, 17] -> [16, 8, 8]
-        nn.Conv2d(
-            in_channels=8, out_channels=16, kernel_size=(3, 3), padding=(1, 1), bias=False
-        ),
-        nn.ReLU(),
-        nn.AvgPool2d(2, 2),
-        # [16 * 8 * 8] -> [16, 4, 4]
-        nn.Conv2d(
-            in_channels=16,
-            out_channels=16,
-            kernel_size=(3, 3),
-            padding=(1, 1),
-            stride=(2, 2),
-            bias=False,
-        ),
-        nn.ReLU(),
-        # [16 * 4 * 4] -> [10]
-        nn.Flatten(),
-        nn.Linear(16 * 4 * 4, 10, bias=False),
-        nn.ReLU(),
-    )
+    cnn = build_model("ann")
 
     # init the model weights
     for layer in cnn.modules():
@@ -151,6 +128,9 @@ def main():
             print(
                 f"Epoch {e} - accuracy: {correct_predictions.sum().item()/(len(correct_predictions))*100}%"
             )
+
+        save_checkpoint(cnn, args.output, "ann", epoch=e + 1)
+        print(f"Checkpoint saved: {args.output}")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # speck-tutorial
 
-SynSense Speck2f Dev Kitの接続確認、DVS記録、モデルの配置、N-MNISTを使った学習のサンプルです。
+SynSense Speck2f Dev Kitの接続確認、DVS記録、モデルの配置、N-MNISTを使った学習・実機推論のサンプルです。
 
 ## プログラム一覧
 
@@ -11,8 +11,11 @@ SynSense Speck2f Dev Kitの接続確認、DVS記録、モデルの配置、N-MNI
 | 03 | [03_deploy_toy_model.py](script/03_deploy_toy_model.py) | 小さなCNNをSNNへ変換し、Speckへ配置 | 必要 |
 | 04-01 | [04_01_NMNIST_ann_train.py](script/04_01_NMNIST_ann_train.py) | N-MNISTでANNを学習・評価 | 不要 |
 | 04-02 | [04_02_NMNIST_snn_train.py](script/04_02_NMNIST_snn_train.py) | N-MNISTでSNNを直接学習・評価 | 不要 |
+| 05 | [05_NMNIST_speck_inference.py](script/05_NMNIST_speck_inference.py) | 学習済みモデルをSpeckへ配置してN-MNISTを推論 | 必要（dry-runは不要） |
 
 01で接続を確認してから02または03を実行してください。04の2本は独立した学習プログラムで、02の記録データや03のモデルは使用しません。04-02の実行前に04-01を学習させる必要もありません。
+
+05では04-01または04-02が保存したチェックポイントを使用します。実行前に01で接続を確認し、同じSpeckを使う02・03などのプログラムは終了してください。
 
 ## 共通の準備
 
@@ -27,9 +30,9 @@ apptainer build --fakeroot apptainer/speck.sif apptainer/speck.def
 apptainer test apptainer/speck.sif
 ```
 
-既存のSIFに必要なライブラリが揃っていれば、そのファイルを使用できます。02にはOpenCV、04にはTonicとtqdmが必要です。古いSIFを使用している場合は、現在の定義から再ビルドしてください（04の節に別名でビルドする例もあります）。
+既存のSIFに必要なライブラリが揃っていれば、そのファイルを使用できます。02にはOpenCV、04・05にはTonicが必要です（04はtqdmも使用します）。古いSIFを使用している場合は、現在の定義から再ビルドしてください（04の節に別名でビルドする例もあります）。
 
-USB権限の初回設定とビルドの詳細は[Apptainer環境のREADME](apptainer/README.md)を参照してください。01〜03ではSpeckをUSB 3対応ケーブルでUSB 3ポートへ接続します。
+USB権限の初回設定とビルドの詳細は[Apptainer環境のREADME](apptainer/README.md)を参照してください。01〜03・05ではSpeckをUSB 3対応ケーブルでUSB 3ポートへ接続します。
 
 ### コンテナに入る
 
@@ -187,6 +190,7 @@ python script/04_02_NMNIST_snn_train.py --data /ldisk/habara/data
 | `--epochs` | `10` | エポック数（1以上） |
 | `--batch-size` | `4` | バッチサイズ（1以上） |
 | `--num-workers` | `4` | DataLoaderワーカー数（0でメインプロセスのみ） |
+| `--output` | ANN: `output/nmnist_ann.pt`、SNN: `output/nmnist_snn.pt` | 学習済みチェックポイントの保存先 |
 
 CPUで1エポックだけ実行する例:
 
@@ -197,7 +201,7 @@ python script/04_02_NMNIST_snn_train.py --data data --device cpu --epochs 1 --nu
 
 1エポックでも学習データ全体を処理します。学習率は両方とも`1e-3`、時間ステップ数はANNが1、SNNが100で、変更する場合はコードを編集してください。SNNは固定バッチサイズで処理するため、学習・評価ともバッチサイズに満たない末尾のデータを除外します。ANNは学習時のみ末尾の端数を除外し、評価には全サンプルを使用します。
 
-現在の04のプログラムは学習結果を標準出力へ表示するだけで、重みやチェックポイントをファイルへ保存しません。学習済みモデルの保存やSpeckへの配置処理も含まれていません。
+各エポックの終了時に`--output`へ重み・モデル種別・完了エポック数を保存します。同名ファイルは上書きされるため、過去の重みを残す場合は別の保存先を指定してください。SNNの一時的な膜電位は保存しません。これは05で推論するためのチェックポイントで、optimizerの状態を含む学習再開機能はありません。
 
 ### 学習処理の簡易テスト
 
@@ -206,3 +210,64 @@ python script/04_02_NMNIST_snn_train.py --data data --device cpu --epochs 1 --nu
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+## 05: Speck上でN-MNISTを推論する
+
+学習済みモデルをSpeckへ配置し、N-MNISTのテストイベントをUSB経由で再生して、最終層の発火数から数字を判定します。Speck内蔵DVSカメラの入力は無効にします。ホストのCPUはイベントの準備・送受信・集計を担当し、ニューラルネットワークの推論はSpeck上で実行します。GPUは不要です。
+
+### 1. 学習済みチェックポイントを用意する
+
+更新した04のどちらかを実行してください。SNNを直接学習する例:
+
+```bash
+python script/04_02_NMNIST_snn_train.py --data data --output output/nmnist_snn.pt
+```
+
+ANNを使う場合:
+
+```bash
+python script/04_01_NMNIST_ann_train.py --data data --output output/nmnist_ann.pt
+```
+
+05はチェックポイントからANN/SNNを自動判別し、ANNの場合はSinabsでSNNへ変換します。その後、両方ともSpeck向けに重みを離散化します。以前の保存機能のない04で学習を終了していた場合は、更新後の04で再学習が必要です。任意のモデルや生の`state_dict`ではなく、このリポジトリの04が保存したファイルを指定してください。
+
+### 2. 実機なしで配置設定を確認する
+
+```bash
+python script/05_NMNIST_speck_inference.py --checkpoint output/nmnist_snn.pt --dry-run
+```
+
+`Dry run OK`と論理層から物理コアへの割り当てが表示されれば、重みの読み込み・変換・配置設定の検証が成功しています。USBデバイスは開かず、データセットも読み込みません。実機推論や分類精度の検証ではありません。
+
+### 3. Speckで推論する
+
+Speckを接続し、同じ実機を使用している他のプログラムを終了してから実行します。
+
+```bash
+python script/01_check_device.py
+python script/05_NMNIST_speck_inference.py \
+  --checkpoint output/nmnist_snn.pt \
+  --data data \
+  --num-samples 100 \
+  --output output/nmnist_speck.csv
+```
+
+ANNの重みを使う場合は`--checkpoint output/nmnist_ann.pt`へ変更します。各サンプルの正解・予測・出力発火数を表示し、最後に`Speck accuracy`と判定不能件数（`undecided`）を表示します。`Ctrl-C`で中断するとデバイスを閉じ、CSVには完了済みのサンプルが残ります。
+
+| オプション | 初期値 | 内容 |
+| --- | --- | --- |
+| `--checkpoint` | 必須 | 04で保存したチェックポイント |
+| `--data` | `data` | N-MNIST保存先。未取得ならテストデータをダウンロード |
+| `--device` | `speck2fdevkit:0` | 使用するSpeck |
+| `--num-samples` | `100` | 残りのテストデータ全体から等間隔に抽出する件数。`0`で残り全件 |
+| `--start-index` | `0` | 抽出対象の先頭インデックス |
+| `--output` | 指定なし | 任意のCSV保存先。既存ファイルは上書きしない |
+| `--dry-run` | 無効 | 実機に接続せず配置設定のみ検証 |
+
+先頭の連続した少数サンプルだけに評価が偏らないよう、指定範囲全体から等間隔に抽出します。全件評価は`--num-samples 0`、特定の1件だけを試す場合は`--start-index 123 --num-samples 1`と指定します。
+
+最終層の出力がない場合は`prediction=-1, status=no_spikes`、最多発火数が同率の場合は`prediction=-1, status=tie`とし、どちらも正解率の分母に含めて不正解として扱います。CSVにはインデックス、正解、予測、状態、正誤、数字0〜9の発火数を記録します。
+
+各サンプルの前に実機の膜電位をリセットするため、イベント再生時間に加えて待ち時間があります。ANN→SNN変換、重みの離散化、学習時の時間ビン化と実機のイベント処理の違いにより、04のテスト精度と05の精度は一致するとは限りません。
+
+イベントの入力と最終層の発火数による判定は[Sinabs公式N-MNISTチュートリアル](https://sinabs.readthedocs.io/v3.0.4/speck/notebooks/nmnist_quick_start.html)に沿っています。実機なしのテストは、04の節と同じ`python -m unittest discover -s tests -v`で実行できます。

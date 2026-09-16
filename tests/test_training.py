@@ -4,6 +4,8 @@ import importlib.util
 import io
 from pathlib import Path
 import unittest
+import sys
+import tempfile
 from unittest.mock import patch
 
 import numpy as np
@@ -14,6 +16,7 @@ from tqdm.auto import tqdm
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "script"))
 
 
 def load_script(name):
@@ -84,16 +87,22 @@ class TrainingSmokeTests(unittest.TestCase):
         torch.manual_seed(0)
         output = io.StringIO()
         with (
+            tempfile.TemporaryDirectory() as checkpoint_dir,
             patch.object(module, "NMNIST", SyntheticNMNIST),
             patch.object(module, "SGD", CheckedSGD),
             patch.object(module, "tqdm", lambda data: tqdm(data, disable=True)),
             patch.object(torch.cuda, "is_available", return_value=False),
             patch.object(sl.StatefulLayer, "reset_states", checked_reset),
             patch("sys.argv", [filename, "--epochs", "2", "--batch-size", "2",
-                               "--num-workers", "0"]),
+                               "--num-workers", "0", "--output",
+                               str(Path(checkpoint_dir) / "model.pt")]),
             contextlib.redirect_stdout(output),
         ):
             module.main()
+            from nmnist_model import load_checkpoint
+            restored, model_type = load_checkpoint(Path(checkpoint_dir) / "model.pt")
+            self.assertEqual(model_type, "snn" if "snn" in filename else "ann")
+            self.assertFalse(restored.training)
         self.assertIn("Training device: cpu", output.getvalue())
         self.assertEqual(output.getvalue().count("accuracy:"), 2)
         self.assertEqual(len(steps), 4)
