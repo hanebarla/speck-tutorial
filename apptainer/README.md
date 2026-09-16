@@ -2,8 +2,9 @@
 
 This image provides the Python and native libraries needed to use SynSense
 Speck devices with Sinabs and Samna. It also includes JupyterLab for tutorials.
-The default PyTorch build is CPU-only because a GPU is not required to deploy
-or run a network on Speck.
+PyTorch includes CUDA 12.8 for training on NVIDIA GPUs, including Blackwell.
+CPU execution remains available; a GPU is not required to deploy or run a
+network on Speck.
 
 ## Build
 
@@ -22,6 +23,22 @@ Verify the installed Python stack without a device:
 ```bash
 apptainer test apptainer/speck.sif
 ```
+
+The build and basic test do not require a GPU. CUDA runtime libraries are
+installed with PyTorch; the NVIDIA driver stays on the host. Compared with
+the old CPU-only image, allow several additional GB for downloads, build
+space and the final image. An existing CPU-only SIF must be rebuilt.
+
+On the GPU host, require CUDA and test a small Sinabs forward/backward pass:
+
+```bash
+apptainer test --nv --env SPECK_REQUIRE_CUDA=1 apptainer/speck.sif
+```
+
+This must print `GPU computation: OK`, not just a successful import. Without
+`SPECK_REQUIRE_CUDA=1`, GPU computation is skipped when no GPU is available.
+The CUDA wheel selection follows the [PyTorch installation instructions](https://pytorch.org/get-started/previous-versions/#v280)
+and [Blackwell support announcement](https://pytorch.org/blog/pytorch-2-7/).
 
 ## Configure USB access on the host (once)
 
@@ -46,11 +63,15 @@ lsusb
 
 ## Run
 
-Open an interactive shell with the USB bus visible:
+Open an interactive shell with the USB bus and NVIDIA GPU visible:
 
 ```bash
-apptainer shell apptainer/speck.sif
+apptainer shell --nv apptainer/speck.sif
 ```
+
+Omit `--nv` when GPU access is not needed. See the
+[Apptainer GPU documentation](https://apptainer.org/docs/user/latest/gpu.html)
+for how the host driver and GPU are exposed to the container.
 
 Check that Samna can discover the board:
 
@@ -62,7 +83,7 @@ apptainer exec apptainer/speck.sif \
 Start JupyterLab in the current repository:
 
 ```bash
-apptainer exec apptainer/speck.sif \
+apptainer exec --nv apptainer/speck.sif \
   jupyter lab --ip=127.0.0.1 --no-browser
 ```
 
@@ -84,7 +105,7 @@ prevent Samna from opening the device even though `lsusb` can still list it.
 ## Included versions
 
 - Ubuntu 24.04 / Python 3.12
-- PyTorch 2.8.0 (CPU)
+- PyTorch 2.8.0+cu128 (CUDA 12.8, also supports CPU execution)
 - Sinabs 3.1.3
 - Samna 0.48.6 (native SynSense wheel)
 - NumPy 1.26.4 and OpenCV headless 4.11.0.86 (compatible with Tonic)

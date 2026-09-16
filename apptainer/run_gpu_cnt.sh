@@ -1,0 +1,1 @@
+apptainer shell --nv --bind /home/work-tenjin/ldisk:/ldisk /home/work-tenjin/ldisk/habara/container/speck.sif

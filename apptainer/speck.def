@@ -3,18 +3,24 @@ From: ubuntu:24.04
 
 %labels
     org.opencontainers.image.title Speck development environment
-    org.opencontainers.image.description Sinabs and Samna environment for SynSense Speck devices
-    org.opencontainers.image.version 2026.08
+    org.opencontainers.image.description Sinabs, Samna and CUDA PyTorch environment for SynSense Speck devices
+    org.opencontainers.image.version 2026.09
     org.opencontainers.image.source https://github.com/synsense/sinabs
 
 %help
-    Speck development environment containing Sinabs, Samna and CPU PyTorch.
+    Speck development environment containing Sinabs, Samna and CUDA 12.8 PyTorch.
 
     Build:
         apptainer build --fakeroot speck.sif speck.def
 
     Check Python packages:
         apptainer test speck.sif
+
+    Check GPU computation (requires an NVIDIA GPU and host driver):
+        apptainer test --nv --env SPECK_REQUIRE_CUDA=1 speck.sif
+
+    Start a GPU-enabled shell:
+        apptainer shell --nv speck.sif
 
     List connected SynSense devices:
         apptainer exec speck.sif \
@@ -68,11 +74,12 @@ From: ubuntu:24.04
         setuptools==80.9.0 \
         wheel==0.46.1
 
-    # A CPU wheel is sufficient for compiling and deploying networks to Speck,
-    # and avoids pulling several gigabytes of unused CUDA libraries.
+    # CUDA 12.8 wheels support Blackwell GPUs, including RTX PRO 4000.
+    # Keep the tested PyTorch version; CUDA runtime libraries come from pip.
+    # The NVIDIA driver is supplied by the host via apptainer --nv at runtime.
     /opt/venv/bin/python -m pip install --no-cache-dir \
-        --index-url https://download.pytorch.org/whl/cpu \
-        torch==2.8.0+cpu
+        --index-url https://download.pytorch.org/whl/cu128 \
+        torch==2.8.0+cu128
 
     # Install the native Samna wheel directly. The package on PyPI is a small
     # shim that downloads/replaces itself on first import, which cannot work
@@ -100,6 +107,7 @@ From: ubuntu:24.04
     /opt/venv/bin/python -m pip check
     /opt/venv/bin/python - <<'PY'
 from importlib.metadata import version
+import os
 
 import samna
 import sinabs
@@ -111,13 +119,36 @@ from sinabs.backend.dynapcnn import DynapcnnNetwork
 
 assert hasattr(samna, "device")
 assert DynapcnnNetwork is not None
+assert torch.version.cuda == "12.8", "Expected the CUDA 12.8 PyTorch build"
 print(f"torch={version('torch')}")
+print(f"torch CUDA={torch.version.cuda}")
 print(f"sinabs={version('sinabs')}")
 print(f"samna={version('samna')}")
 print(f"opencv-python-headless={version('opencv-python-headless')}")
 print(f"tonic={version('tonic')}")
 print(f"tqdm={version('tqdm')}")
 assert tonic.transforms.ToFrame(sensor_size=(34, 34, 2), n_time_bins=1) is not None
+cuda_available = torch.cuda.is_available()
+print(f"CUDA available={cuda_available}")
+if os.environ.get("SPECK_REQUIRE_CUDA") == "1":
+    assert cuda_available, "GPU is unavailable: use --nv and check the host NVIDIA driver"
+if cuda_available:
+    # Exercise CUDA/cuDNN and Sinabs backward, not just device discovery.
+    model = torch.nn.Sequential(
+        torch.nn.Conv2d(2, 4, 3, bias=False),
+        sinabs.layers.IAFSqueeze(batch_size=1, min_v_mem=-1.0),
+    ).cuda()
+    x = torch.randn(2, 2, 34, 34, device="cuda", requires_grad=True)
+    loss = model(x).square().mean()
+    loss.backward()
+    torch.cuda.synchronize()
+    assert torch.isfinite(loss).item()
+    assert x.grad is not None and torch.isfinite(x.grad).all().item()
+    assert model[0].weight.grad is not None
+    assert torch.isfinite(model[0].weight.grad).all().item()
+    print(f"GPU computation: OK ({torch.cuda.get_device_name(0)})")
+else:
+    print("GPU computation: skipped (run test --nv with SPECK_REQUIRE_CUDA=1 to require it)")
 print("Speck Python environment: OK")
 PY
 

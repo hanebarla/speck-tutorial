@@ -42,6 +42,8 @@ USB権限の初回設定とビルドの詳細は[Apptainer環境のREADME](appta
 apptainer shell apptainer/speck.sif
 ```
 
+04の学習にGPUを使用する場合は、更新したCUDA版SIFを`apptainer shell --nv apptainer/speck.sif`で起動してください。`--nv`は起動するたびに指定します。
+
 以降の`python script/...`は、このコンテナ内で実行します。終了するときは`exit`を入力してください。
 
 `apptainer/run_cnt.sh`も利用できますが、SIFの場所と`/ldisk`へのbindが特定の環境向けに固定されています。利用する場合は自分の保存先に合わせてから、ホスト側で次を実行してください。
@@ -49,6 +51,8 @@ apptainer shell apptainer/speck.sif
 ```bash
 sh apptainer/run_cnt.sh
 ```
+
+GPU用の`apptainer/run_gpu_cnt.sh`は`--nv`付きで起動します。こちらもSIFの保存先が固定されているため、再ビルドしたSIFのパスに合わせてください。古いCPU版SIFのままではGPUを利用できません。
 
 SpeckにはApptainer標準の`/dev`共有を使用します。`--contain`や明示的な`--bind /dev/bus/usb:/dev/bus/usb`は追加しないでください。この環境では明示bindに`nodev`が付き、`lsusb`には表示されてもSamnaから開けなくなることを確認しています。
 
@@ -133,8 +137,8 @@ Deployment succeeded.
 
 ```bash
 apptainer build --fakeroot apptainer/speck-training.sif apptainer/speck.def
-apptainer test apptainer/speck-training.sif
-apptainer shell apptainer/speck-training.sif
+apptainer test --nv --env SPECK_REQUIRE_CUDA=1 apptainer/speck-training.sif
+apptainer shell --nv apptainer/speck-training.sif
 ```
 
 コンテナ内で依存関係を確認できます。
@@ -144,13 +148,15 @@ python -m pip check
 python -c 'import tonic, tqdm, torch, sinabs; print("training imports: OK")'
 ```
 
-デバイスは自動選択されます。CUDAが利用可能なら`cuda:0`、それ以外では`cpu`を使います。現在の定義はCPU版PyTorchなので、コードを編集せずCPUで実行できます。進捗表示にはターミナルにも対応する`tqdm.auto`を使用しています。
+デバイスは自動選択されます。CUDAが利用可能なら`cuda:0`、それ以外では`cpu`を使います。現在の定義はPyTorch 2.8.0のCUDA 12.8版で、このマシンのRTX PRO 4000 BlackwellでのGPU学習向けです。CPU実行も引き続き可能です。進捗表示にはターミナルにも対応する`tqdm.auto`を使用しています。
 
-GPUで学習する場合は、CUDA対応PyTorchとNVIDIAドライバーに適合する別途の環境を用意し、Apptainerを`--nv`付きで起動します。CPU版SIFに`--nv`を付けるだけではCUDA対応にはなりません。GPU用環境では、次が`True`になることを確認してください。
+以前のCPU版SIFを使っている場合は再ビルドが必要です。`--nv`を付けるだけではCPU版PyTorchはCUDA対応になりません。GPU用環境では、次が`True`になることを確認してください。上記の`apptainer test`はGPU上の畳み込みとSinabsの順伝播・逆伝播まで検証し、GPUが利用できなければ失敗します。
 
 ```bash
 python -c 'import torch; print(torch.cuda.is_available())'
 ```
+
+GPUの使用を必須にして学習するには`--device cuda:0`を指定します。例えば`python script/04_02_NMNIST_snn_train.py --data data --device cuda:0`です。CPUのみで使う場合は起動時の`--nv`を省略し、学習時に`--device cpu`を指定できます。GPUなしの基本検査は`apptainer test apptainer/speck-training.sif`で実行できます。
 
 ### 04-01: ANNの学習
 

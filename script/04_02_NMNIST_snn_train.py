@@ -22,8 +22,8 @@ def main():
     parser.add_argument("--data", type=str, default="data", help="path to the dataset")
     parser.add_argument("--device", default="auto", help="auto, cpu, cuda:0, ...")
     parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--batch-size", type=int, default=4)
-    parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument("--num-workers", type=int, default=8)
     parser.add_argument("--output", type=Path, default=Path("output/nmnist_snn.pt"),
                         help="checkpoint path (updated after each epoch)")
     args = parser.parse_args()
