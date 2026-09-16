@@ -87,5 +87,6 @@ prevent Samna from opening the device even though `lsusb` can still list it.
 - PyTorch 2.8.0 (CPU)
 - Sinabs 3.1.3
 - Samna 0.48.6 (native SynSense wheel)
-- OpenCV headless 5.0.0.93
+- NumPy 1.26.4 and OpenCV headless 4.11.0.86 (compatible with Tonic)
+- Tonic 1.6.0 and tqdm 4.x for N-MNIST training
 - JupyterLab 4.x and ipywidgets 8.x
